@@ -1,0 +1,49 @@
+function Get-Sample {
+    #  Part 1 of 3
+    #  ------------
+    #  Packages location - This is an example of the location from where you extract the Microsoft.Azure.Kusto.Tools package.
+    #  Please make sure you load the types from a local directory and not from a remote share.
+    $packagesRoot = ".\microsoft.azure.kusto.tools.5.0.8\tools"
+
+    #  Part 2 of 3
+    #  ------------
+    #  Loading the Kusto.Client library and its dependencies
+    dir $packagesRoot\* | Unblock-File
+    [System.Reflection.Assembly]::LoadFrom("$packagesRoot\Kusto.Data.dll")
+
+    #  Part 3 of 3
+    #  ------------
+    #  Defining the connection to your cluster / database
+    $clusterUrl = "https://help.kusto.windows.net;Fed=True"
+    $databaseName = "Samples"
+
+    #   Option A: using Azure AD User Authentication
+    $kcsb = New-Object Kusto.Data.KustoConnectionStringBuilder ($clusterUrl, $databaseName)
+    
+    #   Option B: using Azure AD application Authentication
+    #     $applicationId = "application ID goes here"
+    #     $applicationKey = "application key goes here"
+    #     $authority = "authority goes here"
+    #     $kcsb = $kcsb.WithAadApplicationKeyAuthentication($applicationId, $applicationKey, $authority)
+    #
+    #   NOTE: if you're running with Powershell 7 (or above) and the .NET Core library,
+    #         AAD user authentication with prompt will not work, and you should choose
+    #         a different authentication method.
+
+    $queryProvider = [Kusto.Data.Net.Client.KustoClientFactory]::CreateCslQueryProvider($kcsb)
+    $query = "StormEvents | limit 5"
+    Write-Host "Executing query: '$query' with connection string: '$($kcsb.ToString())'"
+    #   Optional: set a client request ID and set a client request property (e.g. Server Timeout)
+    $crp = New-Object Kusto.Data.Common.ClientRequestProperties
+    $crp.ClientRequestId = "MyPowershellScript.ExecuteQuery." + [Guid]::NewGuid().ToString()
+    $crp.SetOption([Kusto.Data.Common.ClientRequestProperties]::OptionServerTimeout, [TimeSpan]::FromSeconds(30))
+
+    #   Execute the query
+    $reader = $queryProvider.ExecuteQuery($query, $crp)
+
+    # Do something with the result datatable, for example: print it formatted as a table, sorted by the 
+    # "StartTime" column, in descending order
+    $dataTable = [Kusto.Cloud.Platform.Data.ExtendedDataReader]::ToDataSet($reader).Tables[0]
+    $dataView = New-Object System.Data.DataView($dataTable)
+    $dataView | Sort StartTime -Descending | Format-Table -AutoSize
+}
